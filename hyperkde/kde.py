@@ -1,3 +1,9 @@
+"""
+KDE module
+
+Author: Mikel Falxa
+"""
+
 import numpy as np
 from scipy.special import logsumexp
 from scipy.spatial import KDTree
@@ -7,9 +13,12 @@ import matplotlib.pyplot as plt
 import corner
 
 class KDE:
-
+    """ A KDE class  
+    """
+    
     def __init__(self, param_names, chains, bandwidth=None, adapt_scale=10, bw_adapt=True):
-
+        """
+        """
         self.param_name = param_names[0]
         self.param_names = param_names
         self.adapt_scale = adapt_scale
@@ -42,32 +51,33 @@ class KDE:
 
 
     def coeff(self, d, k):
-
+        """
+        """
         num = 1/2 + d/4 - 2**(d/2) * (1 + d/2)
         den = d/2 - k * d * (2**(d/2) - 1)
-
         return num / den
 
 
     def _make_B(self, k):
-
+        """
+        """
         num = 2**(-(self.ndim + 3)/2) + k * (1/(2*(2**((self.ndim-1)/2))) - 1/(2**(1/2)))
         den = 1/(8 * (2**((self.ndim-1)/2))) - 1/(2**(3/2))
         B = (num / den) * np.ones(self.ndim)
-
         return B
 
 
     def _make_A(self, distances):
-
+        """
+        """
         A = np.tile(distances, (self.ndim, 1))
         A += 2*np.diag(distances)
-
         return A
 
 
     def adapt_bandwidth(self, k):
-
+        """
+        """
         if self.ndim == 1:
             tree = KDTree(np.reshape(np.copy(self.chains), (-1, 1)))
             k_nearest_distance = tree.query(np.reshape(self.chains, (-1, 1)), k=k+1)[0]
@@ -84,7 +94,8 @@ class KDE:
 
 
     def sort_adapt_bandwidth(self, k):
-
+        """
+        """
         if self.ndim == 1:
             factor = 3 / self._make_B(k)[0]
             self.chains = self.chains.flatten()
@@ -100,7 +111,8 @@ class KDE:
 
 
     def draw(self, size=1, random=True):
-
+        """
+        """
         n = np.arange(self.n)
         if random:
             idx = np.random.choice(n, size=size, replace=False)
@@ -115,7 +127,8 @@ class KDE:
 
 
     def logprob(self, x):
-
+        """
+        """
         if self.ndim == 1:
             d = np.subtract(self.chains, np.repeat(np.sum(x), self.n))
             y = -0.5 * np.divide(d**2, self.bw**2) - 0.5 * self.ndim * (np.log(2*np.pi) + 2*np.log(self.bw))
@@ -131,7 +144,8 @@ class KDE:
 
 
     def logprobs(self, x):
-
+        """
+        """
         logpdfs = np.zeros(len(x))
         for k in range(len(x)):
             logpdfs[k] = self.logprob(x[k])
@@ -140,17 +154,20 @@ class KDE:
 
 
     def prob(self, x):
-
+        """
+        """
         return np.exp(self.logprob(x))
 
 
     def probs(self, x):
-
+        """
+        """
         return np.exp(self.logprobs(x))
 
 
     def _density_at_point_i(self, i, data):
-
+        """
+        """
         edges_min = self.chains[i] - self.bw[i]
         edges_max = self.chains[i] + self.bw[i]
         bin_volume = np.prod(edges_max - edges_min)
