@@ -8,7 +8,7 @@ import corner
 
 class KDE:
 
-    def __init__(self, param_names, chains, bandwidth=None, adapt_scale=10, bw_adapt=True):
+    def __init__(self, param_names, chains, bandwidth=None, adapt_scale=10, use_kmeans=False, bw_adapt=True):
 
         self.param_name = param_names[0]
         self.param_names = param_names
@@ -20,6 +20,8 @@ class KDE:
             self.ndim = np.shape(chains)[1]
             self.chains = chains
         self.n = len(chains)
+        self._count_clusters()
+        self.n_clusters = np.ones(self.ndim, dtype='int')
         if bandwidth is None:
             bw0 = np.random.rand(self.ndim)
             if self.ndim == 1:
@@ -38,7 +40,10 @@ class KDE:
         if self.k > self.n:
             self.k = self.n
         if bw_adapt:
-            self.sort_adapt_bandwidth(self.k)
+            if use_kmeans:
+                self.cluster_adapt_bandwidth(self.k)
+            else:
+                self.sort_adapt_bandwidth(self.k)
 
 
     def coeff(self, d, k):
@@ -91,12 +96,70 @@ class KDE:
             for i in range(self.n):
                 k_nearest_distance = np.sort((self.chains - self.chains[i])**2)[:k]
                 self.bw[i] = np.sqrt(factor * np.sum(k_nearest_distance))
+            m_bw = np.mean(self.bw)
+            self.bw[:] = m_bw
         else:
             for i in range(self.n):
                 distances = np.zeros(self.ndim)
                 for d in range(self.ndim):
                     distances[d] = np.sum(np.sort((self.chains[:, d] - self.chains[i, d])**2)[:k])
                 self.bw[i, :] = np.sqrt(1/np.linalg.solve(self._make_A(distances), self._make_B(k)))
+            m_bw = np.mean(self.bw, axis=0)
+            self.bw[:] = m_bw
+
+
+    def cluster_adapt_bandwidth(self, k0):
+
+        k_cluster_state = np.zeros(self.ndim, dtype='int')
+        # apply mask to chains : self.chains[mask]
+        # fill-up some local bw_0 array of length masked chain
+        # assign bw_0 to self.bw[mask]
+        #
+        # TRY TO FIND A WAY TO GET RID OF THIS UGLY FOR LOOP
+        # see if tree.query takes several input points (it does, pasa gau on)
+        # 
+        # What if I don't even need to use kd-tree for nearest neighbours ? only use 1D postetiors
+
+        final_state = self.n_clusters - 1
+        final_state[0] += 1
+        while not np.all(k_cluster_state == final_state):
+
+            mask = self._get_single_cluster_mask(k_cluster_state)
+            data = self.chains[mask]
+
+            if k0 > len(data):
+                k = len(data) - 1
+            else:
+                k = k0
+
+            if len(data) > 0:
+
+                if self.ndim == 1:
+                    bw_0 = np.zeros(len(data))
+                    factor = 3 / self._make_B(k)[0]
+                    data = data.flatten()
+                    for i in range(len(data)):
+                        k_nearest_distance = np.sort((data - data[i])**2)[:k]
+                        bw_0[i] = np.sqrt(factor * np.sum(k_nearest_distance))
+                    self.chains = self.chains.flatten()
+                else:
+                    tree = KDTree(data)
+                    bw_0 = np.zeros(np.shape(data))
+                    distances = np.zeros((len(data), self.ndim))
+                    for i in range(len(data)):
+                        k_nearest_idx = tree.query(data[i], k=k+1)[1]
+                        for d in range(self.ndim):
+                            distances[i, d] = np.sum((data[k_nearest_idx, d] - data[i, d])**2)
+                    for i in range(len(data)):
+                        bw_0[i, :] = np.sqrt(1/np.linalg.solve(self._make_A(distances[i]), self._make_B(k)))
+
+                self.bw[mask] = bw_0
+                k_cluster_state = self._cycle_k_cluster_state(k_cluster_state)
+
+            else:
+
+                k_cluster_state = self._cycle_k_cluster_state(k_cluster_state)
+
 
 
     def draw(self, size=1, random=True):
@@ -156,3 +219,50 @@ class KDE:
         bin_volume = np.prod(edges_max - edges_min)
         n_points = np.count_nonzero(self._mask_data(data, edges_min, edges_max))
         return n_points/bin_volume
+
+
+    def _get_single_cluster_mask(self, k_cluster_state):
+
+        # IDEA : apply mask to chain AND bandwidth to assign bw to point correctly
+
+        mask = np.ones(self.n, dtype='bool')
+        if self.ndim == 1:
+            if self.n_clusters[0] == 1:
+                mask = mask
+            else:
+                idx = kmeans2(self.chains, self.n_clusters[0])[1]
+                mask *= (idx == k_cluster_state[0])
+        else:
+            for i in range(self.ndim):
+                if self.n_clusters[i] == 1:
+                    continue
+                else:
+                    idx = kmeans2(self.chains[:, i], self.n_clusters[i])[1]
+                    mask *= (idx == k_cluster_state[i])
+
+        return mask
+
+
+    def _cycle_k_cluster_state(self, k_cluster_state):
+
+        k_cluster_state[-1] += 1
+        for i in np.arange(1, len(k_cluster_state))[::-1]:
+            if k_cluster_state[i] == self.n_clusters[i]:
+                k_cluster_state[i-1] += 1
+                k_cluster_state[i] = 0
+            
+        return k_cluster_state
+
+
+    def _count_clusters(self):
+
+        if self.ndim == 1:
+            n_cluster = len(find_peaks(np.histogram(self.chains)[0]))
+            self.n_clusters = np.array([1 if n_cluster <= 1 else n_cluster])
+            # self.n_clusters[0] = 1
+        else:
+            self.n_clusters = np.ones(self.ndim, dtype='int')
+            for i in range(self.ndim):
+                n_cluster = len(find_peaks(np.histogram(self.chains[:, i])[0])[0])
+                self.n_clusters[i] = 1 if n_cluster <= 1 else n_cluster
+                # self.n_clusters[i] = 1
