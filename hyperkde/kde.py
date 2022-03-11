@@ -13,18 +13,9 @@ import matplotlib.pyplot as plt
 import corner
 
 class KDE:
-<<<<<<< HEAD:kde.py
 
     def __init__(self, param_names, chains, bandwidth=None, adapt_scale=10, use_kmeans=False, bw_adapt=True):
 
-=======
-    """ A KDE class  
-    """
-    
-    def __init__(self, param_names, chains, bandwidth=None, adapt_scale=10, bw_adapt=True):
-        """
-        """
->>>>>>> e42978cfa2ec9b3118537c253778103421ebadc3:hyperkde/kde.py
         self.param_name = param_names[0]
         self.param_names = param_names
         self.adapt_scale = adapt_scale
