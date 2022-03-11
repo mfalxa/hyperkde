@@ -233,7 +233,6 @@ class KDE:
         bin_volume = np.prod(edges_max - edges_min)
         n_points = np.count_nonzero(self._mask_data(data, edges_min, edges_max))
         return n_points/bin_volume
-<<<<<<< HEAD:kde.py
 
 
     def _get_single_cluster_mask(self, k_cluster_state):
@@ -281,5 +280,3 @@ class KDE:
                 n_cluster = len(find_peaks(np.histogram(self.chains[:, i])[0])[0])
                 self.n_clusters[i] = 1 if n_cluster <= 1 else n_cluster
                 # self.n_clusters[i] = 1
-=======
->>>>>>> e42978cfa2ec9b3118537c253778103421ebadc3:hyperkde/kde.py
