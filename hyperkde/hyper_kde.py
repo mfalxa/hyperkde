@@ -139,7 +139,8 @@ class HyperKDE:
     def randomize_kdes(self):
         """ Randomize subset of KDEs
         """
-        size = np.random.randint(1, min(len(self.paramlists), self.nmax))
+        size = np.random.randint(1, self.nmax)
+        size = min(len(self.paramlists), size)
         distr_idxs = np.random.choice(np.arange(len(self.paramlists)), size=size,
                                       replace=False, p=self.weights)
         param_names = []
