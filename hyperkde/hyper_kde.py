@@ -79,7 +79,7 @@ class HyperKDE:
         return logp
 
 
-    def draw_from_random_hyp_kde(self, x, iter, beta):
+    def draw_from_random_hyp_kde(self, x):
         """Function to use as proposal if PTMCMC is used, draws samples from
         a random subset of KDEs
         """
@@ -102,7 +102,7 @@ class HyperKDE:
         return q, float(lqxy)
 
 
-    def draw_from_hyp_kde(self, x, iter, beta):
+    def draw_from_hyp_kde(self, x):
         """Function to use as proposal if PTMCMC is used, draws samples from
         full set of KDEs
 
@@ -139,7 +139,9 @@ class HyperKDE:
     def randomize_kdes(self):
         """ Randomize subset of KDEs
         """
-        distr_idxs = np.random.choice(np.arange(len(self.paramlists)), size=np.random.randint(1, self.nmax), replace=False, p=self.weights)
+        size = np.random.randint(1, min(len(self.paramlists), self.nmax))
+        distr_idxs = np.random.choice(np.arange(len(self.paramlists)), size=size,
+                                      replace=False, p=self.weights)
         param_names = []
         for idx in distr_idxs:
             param_names.extend(self.paramlists[idx])
