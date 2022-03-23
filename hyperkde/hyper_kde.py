@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 class HyperKDE:
     """ A HyperKDE class  
     """
-    def __init__(self, model_params, chains, chains_params, js_threshold, kde_bandwidth=None, bw_adapt=True, adapt_scale=10, n_kde_max=None):
+    def __init__(self, model_params, chains, chains_params, js_threshold, kde_bandwidth=None, bw_adapt=True, adapt_scale=10, use_kmeans=False, n_kde_max=1):
         """
         @ model_params : list of currently sampled model parameters
         @ chains : previously sampled chains to which KDE is applied
@@ -28,6 +28,7 @@ class HyperKDE:
         self.kde_bandwidth = kde_bandwidth
         self.bw_adapt = bw_adapt
         self.adapt_scale = adapt_scale
+        self.use_kmeans = use_kmeans
         self.par_idx = [i for i in range(len(chains_params)) if chains_params[i] in list(model_params)]
         self.params = list(chains_params[self.par_idx])
         self.js_threshold = js_threshold
@@ -265,7 +266,7 @@ class HyperKDE:
 
             idx = [self.params.index(p) for p in pl]
 
-            new_distr = KDE(pl, chains[:, idx], bandwidth=self.kde_bandwidth, bw_adapt=self.bw_adapt, adapt_scale=self.adapt_scale)
+            new_distr = KDE(pl, chains[:, idx], bandwidth=self.kde_bandwidth, bw_adapt=self.bw_adapt, adapt_scale=self.adapt_scale, use_kmeans=self.use_kmeans)
             distr.append(new_distr)
         
             n += 1

@@ -21,13 +21,13 @@ class KDE:
         self.adapt_scale = adapt_scale
         if len(np.shape(chains)) == 1:
             self.ndim = 1
-            self.chains = chains.flatten()
+            self.chains = chains
+            self.chains = self.chains.flatten()
         else:
             self.ndim = np.shape(chains)[1]
             self.chains = chains
         self.n = len(chains)
         self._count_clusters()
-        self.n_clusters = np.ones(self.ndim, dtype='int')
         if bandwidth is None:
             bw0 = np.random.rand(self.ndim)
             if self.ndim == 1:
@@ -47,9 +47,10 @@ class KDE:
             self.k = self.n
         if bw_adapt:
             if use_kmeans:
-                self.cluster_adapt_bandwidth(self.k)
+                # self.cluster_adapt_bandwidth(self.k)
+                self.cluster_mask_adapt_bandwidth()
             else:
-                self.sort_adapt_bandwidth(self.k)
+                self.mask_adapt_bandwidth()
 
 
     def coeff(self, d, k):
@@ -116,58 +117,100 @@ class KDE:
             self.bw[:] = m_bw
 
 
-    def cluster_adapt_bandwidth(self, k0):
+    def get_adapt_mask(self, x0, chains, width):
+        mask = np.ones(len(chains), dtype='bool')
+        if self.ndim == 1:
+            mask *= chains > (x0 - 0.5*width)
+            mask *= chains < (x0 + 0.5*width)
+        else:
+            for d in range(self.ndim):
+                mask *= chains[:, d] > (x0[d] - 0.5*width[d])
+                mask *= chains[:, d] < (x0[d] + 0.5*width[d])
+        return mask
+        
+
+    def mask_adapt(self, chains, r):
+
+        n = len(chains)
+        if self.ndim == 1:
+            bw0 = np.zeros(n)
+            chains = chains.flatten()
+            width = r * (np.amax(chains) - np.amin(chains))
+            mean_mask = np.ones(n, dtype='bool')
+            for i in range(n):
+                mask = self.get_adapt_mask(chains[i], chains, width)
+                data = chains[mask]
+                if len(data) > 1:
+                    k = len(chains[mask])
+                    k_nearest_distance = chains[i] - chains[mask]
+                    factor = 3 / self._make_B(k)[0]
+                    bw0[i] = np.sqrt(factor * np.sum(k_nearest_distance**2))
+                else:
+                    mean_mask[mask] = False
+            m_bw0 = np.mean(bw0[mean_mask])
+            bw0[:] = m_bw0
+            chains = chains.flatten()
+        else:
+            width = [r * (np.amax(chains[:, d]) - np.amin(chains[:, d])) for d in range(self.ndim)]
+            mean_mask = np.ones(n, dtype='bool')
+            bw0 = np.zeros(np.shape(chains))
+            for i in range(n):
+                mask = self.get_adapt_mask(chains[i], chains, width)
+                data = chains[mask]
+                if len(data) > 1:
+                    k = len(chains[mask])
+                    distances = np.zeros(self.ndim)
+                    for d in range(self.ndim):
+                        distances[d] = np.sum((chains[i, d] - data[:, d])**2)
+                    try:
+                        bw0[i, :] = np.sqrt(1/np.linalg.solve(self._make_A(distances), self._make_B(k)))
+                    except:
+                        mean_mask[i] = False
+                else:
+                    mean_mask[mask] = False
+            m_bw0 = np.mean(bw0[mean_mask], axis=0)
+            bw0[:] = m_bw0
+
+        return bw0
+
+
+    def mask_adapt_bandwidth(self):
+
+        r = 1./self.adapt_scale
+        if self.ndim == 1:
+            self.chains = self.chains.flatten()
+        self.bw = self.mask_adapt(self.chains, r)
+        
+
+    def cluster_mask_adapt_bandwidth(self):
 
         k_cluster_state = np.zeros(self.ndim, dtype='int')
-        # apply mask to chains : self.chains[mask]
-        # fill-up some local bw_0 array of length masked chain
-        # assign bw_0 to self.bw[mask]
-        #
-        # TRY TO FIND A WAY TO GET RID OF THIS UGLY FOR LOOP
-        # see if tree.query takes several input points (it does, pasa gau on)
-        # 
-        # What if I don't even need to use kd-tree for nearest neighbours ? only use 1D postetiors
+
+        mask_empty_clusters = np.zeros(self.n, dtype='bool')
 
         final_state = self.n_clusters - 1
         final_state[0] += 1
         while not np.all(k_cluster_state == final_state):
 
-            mask = self._get_single_cluster_mask(k_cluster_state)
-            data = self.chains[mask]
+            mask_cluster = self._get_single_cluster_mask(k_cluster_state)
+            data = self.chains[mask_cluster]
 
-            if k0 > len(data):
-                k = len(data) - 1
-            else:
-                k = k0
-
-            if len(data) > 0:
+            if len(data) > int(0.1*self.n):
 
                 if self.ndim == 1:
-                    bw_0 = np.zeros(len(data))
-                    factor = 3 / self._make_B(k)[0]
-                    data = data.flatten()
-                    for i in range(len(data)):
-                        k_nearest_distance = np.sort((data - data[i])**2)[:k]
-                        bw_0[i] = np.sqrt(factor * np.sum(k_nearest_distance))
                     self.chains = self.chains.flatten()
-                else:
-                    tree = KDTree(data)
-                    bw_0 = np.zeros(np.shape(data))
-                    distances = np.zeros((len(data), self.ndim))
-                    for i in range(len(data)):
-                        k_nearest_idx = tree.query(data[i], k=k+1)[1]
-                        for d in range(self.ndim):
-                            distances[i, d] = np.sum((data[k_nearest_idx, d] - data[i, d])**2)
-                    for i in range(len(data)):
-                        bw_0[i, :] = np.sqrt(1/np.linalg.solve(self._make_A(distances[i]), self._make_B(k)))
-
-                self.bw[mask] = bw_0
+                r = 1./self.adapt_scale
+                bw_0 = self.mask_adapt(data, r)
+                while np.any(np.isnan(bw_0)):
+                    r += 0.1
+                    bw_0 = self.mask_adapt(data, r)
+                self.bw[mask_cluster] = self.mask_adapt(data, r)
                 k_cluster_state = self._cycle_k_cluster_state(k_cluster_state)
 
             else:
-
+                mask_empty_clusters[mask_cluster] = True
                 k_cluster_state = self._cycle_k_cluster_state(k_cluster_state)
-
+        self.bw[mask_empty_clusters] = np.mean(self.bw[np.invert(mask_empty_clusters)], axis=0)
 
 
     def draw(self, size=1, random=True):
