@@ -314,12 +314,19 @@ class KDE:
     def _count_clusters(self):
 
         if self.ndim == 1:
-            n_cluster = len(find_peaks(np.histogram(self.chains)[0]))
+            hist, edges = np.histogram(self.chains)
+            centroids_idx = find_peaks(hist)[0]
+            n_cluster = len(centroids_idx)
+            self.k_centroids = edges[centroids_idx]
             self.n_clusters = np.array([1 if n_cluster <= 1 else n_cluster])
             # self.n_clusters[0] = 1
         else:
             self.n_clusters = np.ones(self.ndim, dtype='int')
+            self.k_centroids = []
             for i in range(self.ndim):
-                n_cluster = len(find_peaks(np.histogram(self.chains[:, i])[0])[0])
+                hist, edges = np.histogram(self.chains[:, i])
+                centroids_idx = find_peaks(hist)[0]
+                n_cluster = len(centroids_idx)
+                self.k_centroids.append(edges[centroids_idx])
                 self.n_clusters[i] = 1 if n_cluster <= 1 else n_cluster
                 # self.n_clusters[i] = 1
