@@ -287,15 +287,23 @@ class KDE:
             if self.n_clusters[0] == 1:
                 mask = mask
             else:
-                idx = kmeans2(self.chains, self.n_clusters[0])[1]
+                percentiles = np.linspace(0., 1., self.n_clusters[0]+2)
+                # k_matrix = np.array([np.percentile(self.chains, p) for p in percentiles[1:-1]])
+                # idx = kmeans2(self.chains, self.n_clusters[0], minit='matrix')[1]
+                k_matrix = self.k_centroids
+                idx = kmeans2(self.chains.flatten(), k_matrix, minit='matrix')[1]
                 mask *= (idx == k_cluster_state[0])
         else:
-            for i in range(self.ndim):
-                if self.n_clusters[i] == 1:
+            for nd in range(self.ndim):
+                if self.n_clusters[nd] == 1:
                     continue
                 else:
-                    idx = kmeans2(self.chains[:, i], self.n_clusters[i])[1]
-                    mask *= (idx == k_cluster_state[i])
+                    percentiles = np.linspace(0., 1., self.n_clusters[nd]+2)
+                    k_matrix = np.array([np.percentile(self.chains, p) for p in percentiles[1:-1]])
+                    k_matrix = self.k_centroids[nd]
+                    # idx = kmeans2(self.chains[:, nd], self.n_clusters[nd], minit='matrix')[1]
+                    idx = kmeans2(self.chains[:, nd], k_matrix, minit='matrix')[1]
+                    mask *= (idx == k_cluster_state[nd])
 
         return mask
 
