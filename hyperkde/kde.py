@@ -147,7 +147,8 @@ class KDE:
                 ratio = 1./self.adapt_scale
                 bw_0 = self.mask_adapt(data, ratio)
                 while np.any(np.isnan(bw_0)):
-                    ratio += 0.1
+                    self.adapt_scale /= 2
+                    ratio = 1./self.adapt_scale
                     bw_0 = self.mask_adapt(data, ratio)
                 self.bw[mask_cluster] = self.mask_adapt(data, ratio)
                 k_cluster_state = self._cycle_k_cluster_state(k_cluster_state)
