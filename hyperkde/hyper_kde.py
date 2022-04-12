@@ -6,13 +6,13 @@ Author: Mikel Falxa
 
 import numpy as np
 import scipy.stats as scistats
-from .kde import KDE
+from kde import KDE
 import matplotlib.pyplot as plt
 
 class HyperKDE:
     """ A HyperKDE class  
     """
-    def __init__(self, model_params, chains, chains_params, js_threshold, kde_bandwidth=None, bw_adapt=True, adapt_scale=10, use_kmeans=False, n_kde_max=1):
+    def __init__(self, model_params, chains, chains_params, js_threshold, adapt_scale=10, use_kmeans=False, global_bw=False, n_kde_max=None):
         """
         @ model_params : list of currently sampled model parameters
         @ chains : previously sampled chains to which KDE is applied
@@ -25,21 +25,20 @@ class HyperKDE:
         @ lib : used library to generate KDE ('scipy' or 'sklearn')
         """
         self.model_params = np.array(model_params)
-        self.kde_bandwidth = kde_bandwidth
-        self.bw_adapt = bw_adapt
-        self.adapt_scale = adapt_scale
         self.use_kmeans = use_kmeans
+        self.global_bw = global_bw
+        self.adapt_scale = adapt_scale
         self.par_idx = [i for i in range(len(chains_params)) if chains_params[i] in list(model_params)]
         self.params = list(chains_params[self.par_idx])
         self.js_threshold = js_threshold
-        self.groups_idx, self.paramlists = self._get_correlated_groups(self._get_JS_matrix(chains[:, self.par_idx]), chains_params[self.par_idx], js_threshold)
+        self.groups_idx, self.paramlists = self._get_correlated_groups(self._get_mean_JS_matrix(chains[:, self.par_idx], 100), chains_params[self.par_idx], js_threshold)
         for pl in self.paramlists:
             print(pl)
         print(len(self.groups_idx), 'groups of parameters found')
         self.kdes = self._get_distributions(chains[:, self.par_idx])
         self.nmax = len(self.kdes) if n_kde_max is None else n_kde_max
         self.weights = np.array([kde.ndim for kde in self.kdes]) / np.sum(np.array([kde.ndim for kde in self.kdes]))
-        self.set_all_kdes()
+        self.param_names, self.distr_idxs = self.set_all_kdes()
 
 
     def _get_params_idx(self, chains_params):
@@ -79,8 +78,19 @@ class HyperKDE:
 
         return logp
 
+    
+    def logprobs(self, x):
+        """ Get log-probabilites for samples x
+        """
+        logp = np.zeros(len(x))
+        n = 0
+        for idx in self.distr_idxs:
+            kde_ndim = self.kdes[idx].ndim
+            logp += self.kdes[idx].logprobs(x[:, n:n+kde_ndim])
+            n += kde_ndim
 
-    def draw_from_random_hyp_kde(self, x):
+
+    def draw_from_random_hyp_kde(self, x, iter, beta):
         """Function to use as proposal if PTMCMC is used, draws samples from
         a random subset of KDEs
         """
@@ -88,7 +98,7 @@ class HyperKDE:
         q = x.copy()
         lqxy = 0
 
-        self.randomize_kdes()
+        self.param_names, self.distr_idxs = self.randomize_kdes()
 
         oldsample = [x[list(self.model_params).index(p)]
                     for p in self.param_names]
@@ -103,7 +113,7 @@ class HyperKDE:
         return q, float(lqxy)
 
 
-    def draw_from_hyp_kde(self, x):
+    def draw_from_hyp_kde(self, x, iter, beta):
         """Function to use as proposal if PTMCMC is used, draws samples from
         full set of KDEs
 
@@ -111,7 +121,7 @@ class HyperKDE:
         q = x.copy()
         lqxy = 0
 
-        self.set_all_kdes()
+        self.param_names, self.distr_idxs = self.set_all_kdes()
 
         oldsample = [x[list(self.model_params).index(p)]
                     for p in self.param_names]
@@ -129,22 +139,23 @@ class HyperKDE:
     def set_all_kdes(self):
         """ Use all sub KDEs
         """
-        self.distr_idxs = np.arange(len(self.paramlists))
-        self.param_names = []
-        for idx in self.distr_idxs:
-            self.param_names.extend(self.paramlists[idx])
+        distr_idxs = np.arange(len(self.paramlists))
+        param_names = []
+        for idx in distr_idxs:
+            param_names.extend(self.paramlists[idx])
+
+        return param_names, distr_idxs
 
 
     def randomize_kdes(self):
         """ Randomize subset of KDEs
         """
-        size = np.random.randint(1, self.nmax+1)
-        size = min(len(self.paramlists), size)
-        self.distr_idxs = np.random.choice(np.arange(len(self.paramlists)), size=size,
-                                      replace=False, p=self.weights)
-        self.param_names = []
-        for idx in self.distr_idxs:
-            self.param_names.extend(self.paramlists[idx])
+        distr_idxs = np.random.choice(np.arange(len(self.paramlists)), size=np.random.randint(1, self.nmax), replace=False, p=self.weights)
+        param_names = []
+        for idx in distr_idxs:
+            param_names.extend(self.paramlists[idx])
+
+        return param_names, distr_idxs
 
 
     def _rand_idx(self, n):
@@ -196,6 +207,20 @@ class HyperKDE:
                 js_matrix[j, i] = js_matrix[i, j]
         
         return js_matrix
+
+
+    def _get_mean_JS_matrix(self, chains, it):
+        """Get Jensen-Shannon divergence (original vs shuffled data) for each
+        pair of parameter
+
+        """
+
+        ndim = len(chains[0, :])
+        mean_js_matrix = np.zeros((ndim, ndim))
+        for _ in range(it):
+            mean_js_matrix += self._get_JS_matrix(chains)/it
+        
+        return mean_js_matrix
 
 
     def _get_correlated_groups(self, corrmatrix, params, corr_threshold):
@@ -262,12 +287,72 @@ class HyperKDE:
 
             idx = [self.params.index(p) for p in pl]
 
-            new_distr = KDE(pl, chains[:, idx], bandwidth=self.kde_bandwidth, bw_adapt=self.bw_adapt, adapt_scale=self.adapt_scale, use_kmeans=self.use_kmeans)
+            new_distr = KDE(pl, chains[:, idx], adapt_scale=self.adapt_scale, use_kmeans=self.use_kmeans, global_bw=self.global_bw)
             distr.append(new_distr)
         
             n += 1
 
         return distr
+
+    
+    def get_original_dataset(self):
+        """ Get recombined dataset from all sub-KDEs
+        """
+
+        x0 = self.kdes[0].chains
+        if self.kdes[0].ndim == 1:
+            x0 = np.reshape(x0, (-1, 1))
+        for kde in self.kdes[1:]:
+            if kde.ndim == 1:
+                x_kde = kde.chains
+                x0 = np.hstack((x0, np.reshape(x_kde (-1, 1))))
+            else:
+                x_kde = kde.chains
+                x0 = np.hstack((x0, x_kde))
+        return x0
+
+    
+    def redraw_dataset(self):
+        """ Get recombined and shuffled dataset from all sub-KDEs
+        """
+
+        x0 = self.kdes[0].chains
+        if self.kdes[0].ndim == 1:
+            x0 = np.reshape(x0, (-1, 1))
+        for kde in self.kdes[1:]:
+            if kde.ndim == 1:
+                shuffle_idx = np.random.choice(np.arange(kde.n), size=kde.n, replace=False)
+                x_kde = kde.chains[shuffle_idx]
+                x0 = np.hstack((x0, np.reshape(x_kde (-1, 1))))
+            else:
+                shuffle_idx = np.random.choice(np.arange(kde.n), size=kde.n, replace=False)
+                x_kde = kde.chains[shuffle_idx]
+                x0 = np.hstack((x0, x_kde))
+        return x0
+
+
+    def get_KL(self, kde):
+        """ Compute KL divergence between this KDE and another
+        """
+
+        self.set_all_kdes()
+        kde.set_all_kdes()
+
+        x0 = self.redraw_dataset()
+        ns = len(x0)
+        param_idxs = [list(kde.param_names).index(p) for p in self.param_names]
+        p0_log_p0 = np.zeros(ns)
+        p0_log_p1 = np.zeros(ns)
+        if len(self.param_names) > 1:
+            for i in range(ns):
+                p0_log_p0[i] = self.logprob(x0[i])
+                p0_log_p1[i] = kde.logprob(x0[i, param_idxs])
+        else:
+            for i in range(ns):
+                p0_log_p0[i] = self.logprob(x0[i])
+                p0_log_p1[i] = kde.logprob(x0[i])
+        kl = np.sum(p0_log_p0 - p0_log_p1)/ns
+        return kl
 
 
     def get_KL_term(self, data):

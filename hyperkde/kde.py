@@ -14,51 +14,29 @@ import corner
 
 class KDE:
 
-    def __init__(self, param_names, chains, bandwidth=None, adapt_scale=10, use_kmeans=False, bw_adapt=True):
+    def __init__(self, param_names, chains, adapt_scale=10, use_kmeans=True, global_bw=True):
 
         self.param_name = param_names[0]
         self.param_names = param_names
         self.adapt_scale = adapt_scale
         if len(np.shape(chains)) == 1:
             self.ndim = 1
-            self.chains = chains
-            self.chains = self.chains.flatten()
+            self.chains = chains.flatten()
         else:
             self.ndim = np.shape(chains)[1]
             self.chains = chains
         self.n = len(chains)
-        self._count_clusters()
-        if bandwidth is None:
-            bw0 = np.random.rand(self.ndim)
-            if self.ndim == 1:
-                bw0 = bw0[0]
-            if isinstance(bw0, float):
-                self.bw = bw0 * np.ones(self.n)
-            else:
-                self.bw = np.tile(bw0, (self.n, 1))            
-        elif isinstance(bandwidth, float):
-            if self.ndim == 1:
-                self.bw = bandwidth * np.ones(self.n)
-            else:
-                self.bw = bandwidth * np.ones((self.n, self.ndim))
-        
-        self.k = int(self.n/(self.adapt_scale))
-        if self.k > self.n:
-            self.k = self.n
-        if bw_adapt:
-            if use_kmeans:
-                # self.cluster_adapt_bandwidth(self.k)
-                self.cluster_mask_adapt_bandwidth()
-            else:
-                self.mask_adapt_bandwidth()
-
-
-    def coeff(self, d, k):
-        """
-        """
-        num = 1/2 + d/4 - 2**(d/2) * (1 + d/2)
-        den = d/2 - k * d * (2**(d/2) - 1)
-        return num / den
+        bw0 = np.random.rand(self.ndim)
+        if self.ndim == 1:
+            self.bw = bw0[0] * np.ones(self.n)
+        else:
+            self.bw = np.tile(bw0, (self.n, 1))
+        self.global_bw = global_bw
+        if use_kmeans:
+            self._count_clusters()
+            self.cluster_mask_adapt_bandwidth()
+        else:
+            self.mask_adapt_bandwidth()
 
 
     def _make_B(self, k):
@@ -78,45 +56,6 @@ class KDE:
         return A
 
 
-    def adapt_bandwidth(self, k):
-        """
-        """
-        if self.ndim == 1:
-            tree = KDTree(np.reshape(np.copy(self.chains), (-1, 1)))
-            k_nearest_distance = tree.query(np.reshape(self.chains, (-1, 1)), k=k+1)[0]
-            factor = 3 / self._make_B(k)[0]
-            self.bw = np.sqrt(factor * np.sum(k_nearest_distance**2, axis=1))
-            self.chains = self.chains.flatten()
-        else:
-            distances = np.zeros((self.n, self.ndim))
-            for d in range(self.ndim):
-                tree = KDTree(np.reshape(self.chains[:, d].flatten(), (-1, 1)))
-                distances[:, d] = np.sum(tree.query(tree.data, k=k+1)[0]**2, axis=1)    
-            for i in range(self.n):
-                self.bw[i, :] = np.sqrt(1/np.linalg.solve(self._make_A(distances[i]), self._make_B(k)))
-
-
-    def sort_adapt_bandwidth(self, k):
-        """
-        """
-        if self.ndim == 1:
-            factor = 3 / self._make_B(k)[0]
-            self.chains = self.chains.flatten()
-            for i in range(self.n):
-                k_nearest_distance = np.sort((self.chains - self.chains[i])**2)[:k]
-                self.bw[i] = np.sqrt(factor * np.sum(k_nearest_distance))
-            m_bw = np.mean(self.bw)
-            self.bw[:] = m_bw
-        else:
-            for i in range(self.n):
-                distances = np.zeros(self.ndim)
-                for d in range(self.ndim):
-                    distances[d] = np.sum(np.sort((self.chains[:, d] - self.chains[i, d])**2)[:k])
-                self.bw[i, :] = np.sqrt(1/np.linalg.solve(self._make_A(distances), self._make_B(k)))
-            m_bw = np.mean(self.bw, axis=0)
-            self.bw[:] = m_bw
-
-
     def get_adapt_mask(self, x0, chains, width):
         mask = np.ones(len(chains), dtype='bool')
         if self.ndim == 1:
@@ -127,15 +66,15 @@ class KDE:
                 mask *= chains[:, d] > (x0[d] - 0.5*width[d])
                 mask *= chains[:, d] < (x0[d] + 0.5*width[d])
         return mask
-        
 
-    def mask_adapt(self, chains, r):
 
-        n = len(chains)
+    def mask_adapt(self, chains, ratio):
+
+        n = len(chains)        
         if self.ndim == 1:
             bw0 = np.zeros(n)
             chains = chains.flatten()
-            width = r * (np.amax(chains) - np.amin(chains))
+            width = ratio * (np.amax(chains) - np.amin(chains))
             mean_mask = np.ones(n, dtype='bool')
             for i in range(n):
                 mask = self.get_adapt_mask(chains[i], chains, width)
@@ -148,10 +87,13 @@ class KDE:
                 else:
                     mean_mask[mask] = False
             m_bw0 = np.mean(bw0[mean_mask])
-            bw0[:] = m_bw0
-            chains = chains.flatten()
+            if self.global_bw:
+                bw0[:] = m_bw0
+                chains = chains.flatten()
+            else:
+                bw0[np.invert(mean_mask)] = m_bw0
         else:
-            width = [r * (np.amax(chains[:, d]) - np.amin(chains[:, d])) for d in range(self.ndim)]
+            width = [ratio * (np.amax(chains[:, d]) - np.amin(chains[:, d])) for d in range(self.ndim)]
             mean_mask = np.ones(n, dtype='bool')
             bw0 = np.zeros(np.shape(chains))
             for i in range(n):
@@ -169,18 +111,21 @@ class KDE:
                 else:
                     mean_mask[mask] = False
             m_bw0 = np.mean(bw0[mean_mask], axis=0)
-            bw0[:] = m_bw0
+            if self.global_bw:
+                bw0[:] = m_bw0
+            else:
+                bw0[np.invert(mean_mask)] = m_bw0
 
         return bw0
 
 
     def mask_adapt_bandwidth(self):
 
-        r = 1./self.adapt_scale
+        ratio = 1./self.adapt_scale
         if self.ndim == 1:
             self.chains = self.chains.flatten()
-        self.bw = self.mask_adapt(self.chains, r)
-        
+        self.bw = self.mask_adapt(self.chains, ratio)
+
 
     def cluster_mask_adapt_bandwidth(self):
 
@@ -199,12 +144,12 @@ class KDE:
 
                 if self.ndim == 1:
                     self.chains = self.chains.flatten()
-                r = 1./self.adapt_scale
-                bw_0 = self.mask_adapt(data, r)
+                ratio = 1./self.adapt_scale
+                bw_0 = self.mask_adapt(data, ratio)
                 while np.any(np.isnan(bw_0)):
-                    r += 0.1
-                    bw_0 = self.mask_adapt(data, r)
-                self.bw[mask_cluster] = self.mask_adapt(data, r)
+                    ratio += 0.1
+                    bw_0 = self.mask_adapt(data, ratio)
+                self.bw[mask_cluster] = self.mask_adapt(data, ratio)
                 k_cluster_state = self._cycle_k_cluster_state(k_cluster_state)
 
             else:
@@ -266,16 +211,6 @@ class KDE:
         """
         """
         return np.exp(self.logprobs(x))
-
-
-    def _density_at_point_i(self, i, data):
-        """
-        """
-        edges_min = self.chains[i] - self.bw[i]
-        edges_max = self.chains[i] + self.bw[i]
-        bin_volume = np.prod(edges_max - edges_min)
-        n_points = np.count_nonzero(self._mask_data(data, edges_min, edges_max))
-        return n_points/bin_volume
 
 
     def _get_single_cluster_mask(self, k_cluster_state):
