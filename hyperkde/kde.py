@@ -42,8 +42,8 @@ class KDE:
     def _make_B(self, k):
         """
         """
-        num = 2**(-(self.ndim + 3)/2) + k * (1/(2*(2**((self.ndim-1)/2))) - 1/(2**(1/2)))
-        den = 1/(8 * (2**((self.ndim-1)/2))) - 1/(2**(3/2))
+        num = 2 + 4*k * (1 - 2**(self.ndim/2))
+        den = 1 - 2**(1 + self.ndim/2)
         B = (num / den) * np.ones(self.ndim)
         return B
 
