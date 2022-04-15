@@ -177,8 +177,8 @@ class HyperKDE:
 
         """
         pmin = np.amin([np.amin(p[np.where(p != 0.)]), np.amin(q[np.where(q != 0.)])])
-        p[np.where(p == 0.)] = pmin / 1000
-        q[np.where(q == 0.)] = pmin / 1000
+        p[np.where(p == 0.)] = pmin
+        q[np.where(q == 0.)] = pmin
         kl = bin_area * np.sum(p * (np.log(p) - np.log(q)))
 
         return kl
