@@ -338,7 +338,7 @@ class HyperKDE:
         """
 
         self.set_all_kdes()
-        kde.set_all_kdes()
+        kde.param_names, kde.distr_idxs = kde.set_all_kdes()
 
         x0 = self.redraw_dataset()
         ns = len(x0)
