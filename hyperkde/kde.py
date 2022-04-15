@@ -279,3 +279,14 @@ class KDE:
                 self.k_centroids.append(edges[centroids_idx])
                 self.n_clusters[i] = 1 if n_cluster <= 1 else n_cluster
                 # self.n_clusters[i] = 1
+
+        
+    def _find_pmin(self):
+
+        if self.ndim == 1:
+            bw_min = np.amin(self.bw)
+            pmin = 1/(bw_min * np.sqrt(2*np.pi) * self.n)
+        else:
+            det_bw_min = np.amin(np.prod(self.bw, axis=1))
+            pmin = 1 / ((2*np.pi)**(self.ndim/2) * det_bw_min * self.n)
+        return pmin

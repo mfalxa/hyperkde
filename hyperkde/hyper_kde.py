@@ -32,7 +32,7 @@ class HyperKDE:
         self.par_idx = [i for i in range(len(chains_params)) if chains_params[i] in list(model_params)]
         self.params = list(chains_params[self.par_idx])
         self.js_threshold = js_threshold
-        self.groups_idx, self.paramlists = self._get_correlated_groups(self._get_mean_JS_matrix(chains[:, self.par_idx], 100), chains_params[self.par_idx], js_threshold)
+        self.groups_idx, self.paramlists = self._get_correlated_groups(self._get_JS_matrix(chains[:, self.par_idx]), chains_params[self.par_idx], js_threshold)
         for pl in self.paramlists:
             print(pl)
         print(len(self.groups_idx), 'groups of parameters found')
@@ -177,8 +177,8 @@ class HyperKDE:
 
         """
         pmin = np.amin([np.amin(p[np.where(p != 0.)]), np.amin(q[np.where(q != 0.)])])
-        p[np.where(p == 0.)] = pmin / 1000
-        q[np.where(q == 0.)] = pmin / 1000
+        p[np.where(p == 0.)] = pmin
+        q[np.where(q == 0.)] = pmin
         kl = bin_area * np.sum(p * (np.log(p) - np.log(q)))
 
         return kl
@@ -318,17 +318,19 @@ class HyperKDE:
         """ Get recombined and shuffled dataset from all sub-KDEs
         """
 
-        x0 = self.kdes[0].chains
+        x0 = self.kdes[0].chains + np.random.normal(scale=self.kdes[0].bw)
         if self.kdes[0].ndim == 1:
             x0 = np.reshape(x0, (-1, 1))
         for kde in self.kdes[1:]:
             if kde.ndim == 1:
                 shuffle_idx = np.random.choice(np.arange(kde.n), size=kde.n, replace=False)
-                x_kde = kde.chains[shuffle_idx]
+                x_kde = kde.chains + np.random.normal(scale=kde.bw)
+                x_kde = x_kde[shuffle_idx]
                 x0 = np.hstack((x0, np.reshape(x_kde, (-1, 1))))
             else:
                 shuffle_idx = np.random.choice(np.arange(kde.n), size=kde.n, replace=False)
-                x_kde = kde.chains[shuffle_idx]
+                x_kde = kde.chains + np.random.normal(scale=kde.bw)
+                x_kde = x_kde[shuffle_idx]
                 x0 = np.hstack((x0, x_kde))
         return x0
 
@@ -343,6 +345,9 @@ class HyperKDE:
         x0 = self.redraw_dataset()
         ns = len(x0)
         param_idxs = [list(kde.param_names).index(p) for p in self.param_names]
+        pmins_self = [ke._find_pmin() for ke in self.kdes]
+        pmins = [ke._find_pmin() for ke in kde.kdes]
+        pmin = np.log(np.amin([np.amin(pmins_self), np.amin(pmins)]))
         p0_log_p0 = np.zeros(ns)
         p0_log_p1 = np.zeros(ns)
         if len(self.param_names) > 1:
@@ -353,7 +358,8 @@ class HyperKDE:
             for i in range(ns):
                 p0_log_p0[i] = self.logprob(x0[i])
                 p0_log_p1[i] = kde.logprob(x0[i])
-
+        p0_log_p0[p0_log_p0 < pmin] = pmin
+        p0_log_p1[p0_log_p1 < pmin] = pmin
         kl = np.sum(p0_log_p0 - p0_log_p1)/ns
         return kl
 
