@@ -178,6 +178,10 @@ class KDE:
     def logprob(self, x):
         """
         """
+        # temporary hack
+        bw_min = self.bw[~(self.bw==0)].min()
+        self.bw[self.bw==0] = bw_min
+        
         if self.ndim == 1:
             d = np.subtract(self.chains, np.repeat(np.sum(x), self.n))
             y = -0.5 * np.divide(d**2, self.bw**2) - 0.5 * self.ndim * (np.log(2*np.pi) + 2*np.log(self.bw))
@@ -186,7 +190,8 @@ class KDE:
             y = np.empty(self.n, dtype=float)
             d = np.subtract(self.chains, np.tile(x, (self.n, 1)))
             dbd = np.sum(np.divide(d**2, self.bw**2), axis=1)
-            y = -0.5 * dbd - 0.5 * (self.ndim * np.log(2*np.pi) + 2*np.log(np.prod(self.bw, axis=1)))
+            #y = -0.5 * dbd - 0.5 * (self.ndim * np.log(2*np.pi) + 2*np.log(np.prod(self.bw, axis=1)))
+            y = -0.5 * dbd - 0.5 * (self.ndim * np.log(2*np.pi) + 2*np.sum(np.log(self.bw), axis=1))
             logpdf = logsumexp(y) - np.log(self.n)
 
         return logpdf

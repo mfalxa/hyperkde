@@ -6,8 +6,9 @@ Author: Mikel Falxa
 
 import numpy as np
 import scipy.stats as scistats
-from kde import KDE
+from .kde import KDE
 import matplotlib.pyplot as plt
+import time
 
 class HyperKDE:
     """ A HyperKDE class  
@@ -39,7 +40,6 @@ class HyperKDE:
         self.nmax = len(self.kdes) if n_kde_max is None else n_kde_max
         self.weights = np.array([kde.ndim for kde in self.kdes]) / np.sum(np.array([kde.ndim for kde in self.kdes]))
         self.param_names, self.distr_idxs = self.set_all_kdes()
-
 
     def _get_params_idx(self, chains_params):
         """ Match sub-kde parameter index to dataset parameter index
@@ -90,7 +90,7 @@ class HyperKDE:
             n += kde_ndim
 
 
-    def draw_from_random_hyp_kde(self, x, iter, beta):
+    def draw_from_random_hyp_kde(self, x, **kwargs):
         """Function to use as proposal if PTMCMC is used, draws samples from
         a random subset of KDEs
         """
@@ -113,7 +113,7 @@ class HyperKDE:
         return q, float(lqxy)
 
 
-    def draw_from_hyp_kde(self, x, iter, beta):
+    def draw_from_hyp_kde(self, x, **kwargs):
         """Function to use as proposal if PTMCMC is used, draws samples from
         full set of KDEs
 
@@ -150,7 +150,11 @@ class HyperKDE:
     def randomize_kdes(self):
         """ Randomize subset of KDEs
         """
-        distr_idxs = np.random.choice(np.arange(len(self.paramlists)), size=np.random.randint(1, self.nmax), replace=False, p=self.weights)
+        size = np.random.randint(1, max(2, self.nmax))
+        if size>len(self.paramlists):
+            size = len(self.paramlists)
+        distr_idxs = np.random.choice(np.arange(len(self.paramlists)), size=size,
+                                      replace=False, p=self.weights)
         param_names = []
         for idx in distr_idxs:
             param_names.extend(self.paramlists[idx])
@@ -214,12 +218,10 @@ class HyperKDE:
         pair of parameter
 
         """
-
         ndim = len(chains[0, :])
         mean_js_matrix = np.zeros((ndim, ndim))
         for _ in range(it):
             mean_js_matrix += self._get_JS_matrix(chains)/it
-        
         return mean_js_matrix
 
 
@@ -256,7 +258,7 @@ class HyperKDE:
                 x = ix
             if len(igroup) > 0:
                 groups.append(list(np.unique(igroup)))
-
+                
         grouped = []
         for subgroup in groups:
             grouped.extend(subgroup)
@@ -323,7 +325,7 @@ class HyperKDE:
             if kde.ndim == 1:
                 shuffle_idx = np.random.choice(np.arange(kde.n), size=kde.n, replace=False)
                 x_kde = kde.chains[shuffle_idx]
-                x0 = np.hstack((x0, np.reshape(x_kde (-1, 1))))
+                x0 = np.hstack((x0, np.reshape(x_kde, (-1, 1))))
             else:
                 shuffle_idx = np.random.choice(np.arange(kde.n), size=kde.n, replace=False)
                 x_kde = kde.chains[shuffle_idx]
@@ -351,6 +353,7 @@ class HyperKDE:
             for i in range(ns):
                 p0_log_p0[i] = self.logprob(x0[i])
                 p0_log_p1[i] = kde.logprob(x0[i])
+
         kl = np.sum(p0_log_p0 - p0_log_p1)/ns
         return kl
 
