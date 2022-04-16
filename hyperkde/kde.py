@@ -284,9 +284,9 @@ class KDE:
     def _find_pmin(self):
 
         if self.ndim == 1:
-            bw_min = np.amin(self.bw)
-            pmin = 1/(bw_min * np.sqrt(2*np.pi) * self.n)
+            bw_max = np.amax(self.bw)
+            pmin = 1/(bw_max * np.sqrt(2*np.pi) * self.n)
         else:
-            det_bw_min = np.amin(np.prod(self.bw, axis=1))
-            pmin = 1 / ((2*np.pi)**(self.ndim/2) * det_bw_min * self.n)
+            det_bw_max = np.amax(np.prod(self.bw, axis=1))
+            pmin = 1 / ((2*np.pi)**(self.ndim/2) * det_bw_max * self.n)
         return pmin
