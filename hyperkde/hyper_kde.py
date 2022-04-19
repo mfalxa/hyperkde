@@ -19,11 +19,10 @@ class HyperKDE:
         @ chains : previously sampled chains to which KDE is applied
         @ chains_params : list of parameters of previously sampled chains to which KDE is applied
         @ js_threshold : Jensen-Shannon threshold value for which KDE parameters are considered correlated
-        @ kde_bandwidth : set KDE bandwidth
-        @ bw_adapt : adaptive bandwidth, works only with custom KDE
         @ adapt_scale : bandwidth adaptation scale
+        @ use_kmeans : use clustering algorithm for bw adaptation
+        @ global_bw : use global bandwidth instead of local bandwidth
         @ n_kde_max : max random number of active sub-KDEs
-        @ lib : used library to generate KDE ('scipy' or 'sklearn')
         """
         self.model_params = np.array(model_params)
         self.use_kmeans = use_kmeans
@@ -58,12 +57,6 @@ class HyperKDE:
         for idx in self.distr_idxs:
             x = np.append(x, self.kdes[idx].draw())
         return x
-
-    def redraw_ordered_dataset(self):
-        """
-        """
-        self.set_all_kdes()
-        x = np.hstack([self.kdes[i].draw() for i in range(len(self.kdes))])
 
 
     def logprob(self, x):
@@ -164,7 +157,7 @@ class HyperKDE:
 
 
     def _rand_idx(self, n):
-        """
+        """ Get n shuffled indexes
         """
         i = np.arange(n)
         idx =  np.random.choice(i, size=n, replace=False)
