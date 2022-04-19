@@ -339,7 +339,7 @@ class HyperKDE:
         """ Compute KL divergence between this KDE and another
         """
 
-        self.set_all_kdes()
+        self.param_names, self.distr_idxs = self.set_all_kdes()
         kde.param_names, kde.distr_idxs = kde.set_all_kdes()
 
         x0 = self.redraw_dataset()
