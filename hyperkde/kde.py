@@ -124,7 +124,13 @@ class KDE:
         ratio = 1./self.adapt_scale
         if self.ndim == 1:
             self.chains = self.chains.flatten()
-        self.bw = self.mask_adapt(self.chains, ratio)
+        bw_0 = self.mask_adapt(self.chains, ratio)
+        while np.any(np.isnan(bw_0)) or np.any(bw_0 == 0.):
+            self.adapt_scale /= 2
+            ratio = 1./self.adapt_scale
+            bw_0 = self.mask_adapt(self.chains, ratio)
+        self.bw = bw_0
+        # self.bw = self.mask_adapt(self.chains, ratio)
 
 
     def cluster_mask_adapt_bandwidth(self):
