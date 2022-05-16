@@ -13,7 +13,7 @@ import time
 class HyperKDE:
     """ A HyperKDE class  
     """
-    def __init__(self, model_params, chains, chains_params, js_threshold, adapt_scale=10, use_kmeans=False, global_bw=False, n_kde_max=None):
+    def __init__(self, model_params, chains, chains_params, js_threshold, adapt_scale=10, use_kmeans=False, global_bw=False, n_kde_max=None, groups_idx=None, paramlists=None):
         """
         @ model_params : list of currently sampled model parameters
         @ chains : previously sampled chains to which KDE is applied
@@ -31,7 +31,11 @@ class HyperKDE:
         self.par_idx = [i for i in range(len(chains_params)) if chains_params[i] in list(model_params)]
         self.params = list(chains_params[self.par_idx])
         self.js_threshold = js_threshold
-        self.groups_idx, self.paramlists = self._get_correlated_groups(self._get_JS_matrix(chains[:, self.par_idx]), chains_params[self.par_idx], js_threshold)
+        if groups_idx is None and paramlists is None:
+            self.groups_idx, self.paramlists = self._get_correlated_groups(self._get_JS_matrix(chains[:, self.par_idx]), chains_params[self.par_idx], js_threshold)
+        else:
+            self.groups_idx = groups_idx
+            self.paramlists = paramlists
         for pl in self.paramlists:
             print(pl)
         print(len(self.groups_idx), 'groups of parameters found')
