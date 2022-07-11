@@ -39,11 +39,20 @@ class KDE:
             self.mask_adapt_bandwidth()
 
 
+    # def _make_B(self, k):
+    #     """
+    #     """
+    #     num = 2 + 4*k * (1 - 2**(self.ndim/2))
+    #     den = 1 - 2**(1 + self.ndim/2)
+    #     B = (num / den) * np.ones(self.ndim)
+    #     return B
+
+
     def _make_B(self, k):
         """
         """
-        num = 2 + 4*k * (1 - 2**(self.ndim/2))
-        den = 1 - 2**(1 + self.ndim/2)
+        num = k * (2**(self.ndim/2 + 1)-1) - 1
+        den = 2**(self.ndim/2) - 1
         B = (num / den) * np.ones(self.ndim)
         return B
 
