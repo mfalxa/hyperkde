@@ -1,6 +1,6 @@
 # Hyper KDE
 
-TDB: a short description
+A Kernel Density Estimation python library with custom bandwidth estimation method. It can be used as proposal distribution for MCMC samplers.
 
 # Installation
 
