@@ -378,11 +378,13 @@ class HyperKDE:
 
 class Hypermodel_KDE_proposal:
 
-    def __init__(self, hypermodel_parameters, hkde_list, nmodel_idx=-1):
+    def __init__(self, hypermodel_param_names, hkde_list, nmodel_idx=-1, nmax=1):
 
+        self.hypermodel_param_names = hypermodel_param_names
         self.hkdes = hkde_list
         for hkde in self.hkdes:
-            hkde.model_params = np.array(hypermodel_parameters)
+            hkde.model_params = np.array(hypermodel_param_names)
+            hkde.nmax = nmax
         self.nmodel_idx = nmodel_idx
 
     def draw_from_hkdes(self, x, **kwargs):
