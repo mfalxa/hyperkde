@@ -383,10 +383,11 @@ class Hypermodel_KDE_proposal:
         self.hkdes = hkde_list
         for hkde in self.hkdes:
             hkde.model_params = np.array(hypermodel_parameters)
+        self.nmodel_idx = nmodel_idx
 
     def draw_from_hkdes(self, x, **kwargs):
 
-        nmodel = int(np.rint(x[-1]))
+        nmodel = int(np.rint(x[self.nmodel_idx]))
         q, lqxy = self.hkdes[nmodel].draw_from_random_hyp_kde(x, **kwargs)
 
         return q, float(lqxy)
