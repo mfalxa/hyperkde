@@ -374,3 +374,19 @@ class HyperKDE:
             KL_term -= self.logprob(data[i, idx]) / len(data)
 
         return KL_term
+
+
+class Hypermodel_KDE_proposal:
+
+    def __init__(self, hypermodel_parameters, hkde_list, nmodel_idx=-1):
+
+        self.hkdes = hkde_list
+        for hkde in self.hkdes:
+            hkde.model_params = np.array(hypermodel_parameters)
+
+    def draw_from_hkdes(self, x, **kwargs):
+
+        nmodel = int(np.rint(x[-1]))
+        q, lqxy = self.hkdes[nmodel].draw_from_random_hyp_kde(x, **kwargs)
+
+        return q, float(lqxy)
